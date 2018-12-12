@@ -8,9 +8,24 @@
 #include <avr/io.h>
 #include <stdbool.h>
 
+#define corner_1_x 0
+#define corner_1_y 1
+#define corner_2_x 2
+#define corner_2_y 3
+#define corner_3_x 4
+#define corner_3_y 5
+#define corner_4_x 6
+#define corner_4_y 7
+
+
 int main(void)
 {
 	bool calibration = true;
+	float current_x_pos = 0;
+	float current_y_pos = 0;
+	float past_x_pos = 0;
+	float past_y_pos = 0;
+	float boundries[] = {0,0,0,0,0,0,0,0};
 	
 	if(calibration) {		// Is (Calibration) Mode or (Running) Mode?
 		// wait for button press, if clicked:
@@ -18,9 +33,17 @@ int main(void)
 			//* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
 			//* Once hit a line, (Move counter Clockwise) accordingly with the line being tracked.
 			//* Phase 2: Once hit a threshold of (y-change) while moving, Push a limit (current_X, 0).
+			boundries[corner_1_x] = current_x_pos;
+			boundries[corner_1_y] = 0;
 			//* Phase 3: Once hit a threshold of (x-change) while moving, Push a limit (past_limit_X, current_Y)
+			boundries[corner_2_x] = past_x_pos;
+			boundries[corner_2_y] = current_y_pos;
 			//* Phase 4: Once hit a threshold of (y-change) while moving, Push a limit (current_X, past_limit_Y)
+			boundries[corner_3_x] = current_x_pos;
+			boundries[corner_3_y] = past_y_pos;
 			//* Phase 5: Push a limit (last_X, 0)
+			boundries[corner_4_x] = past_x_pos;
+			boundries[corner_4_y] = 0;
 			//* Phase 6: Rotate car and move anywhere inside the closed rectangle.
 			
 		calibration = 0;		// After calibration -> turn to (Running) Mode.
