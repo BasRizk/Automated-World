@@ -23,7 +23,7 @@ int main(void)
 			//* Phase 5: Push a limit (last_X, 0)
 			//* Phase 6: Rotate car and move anywhere inside the closed rectangle.
 			
-		//calibration = 0;		// After calibration -> turn to (Running) Mode.
+		calibration = 0;		// After calibration -> turn to (Running) Mode.
 	}
 	else if(!calibration) {	// else if (Running) Mode:
 		// wait for button press, if clicked:
