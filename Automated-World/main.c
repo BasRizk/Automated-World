@@ -6,10 +6,7 @@
  */ 
 
 #include <avr/io.h>
-
-typedef int bool;
-#define true 1
-#define false 0
+#include <stdbool.h>
 
 int main(void)
 {
