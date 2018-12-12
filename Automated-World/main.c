@@ -14,7 +14,7 @@ int main(void)
 	
 	if(1/*calibration*/) {		// Is (Calibration) Mode or (Running) Mode?
 		// wait for button press, if clicked:
-		// car is moving and scanning the borders, limits should be set according to Cartesian coordinates
+		// car is moving and scanning the borders, limits should be set according to Cartesian coordinates:
 			//* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
 			//* Once hit a line, (Move counter Clockwise) accordingly with the line being tracked.
 			//* Phase 2: Once hit a threshold of (y-change) while moving, Push a limit (current_X, 0).
