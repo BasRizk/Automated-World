@@ -25,7 +25,7 @@ int main(void)
 			
 		//calibration = 0;		// After calibration -> turn to (Running) Mode.
 	}
-	else if(1/*!calibration*/) {
+	else if(1/*!calibration*/) {	// else if (Running) Mode:
 		// wait for button press, if clicked:
 			// Calculate (toBeTraveledDistance) relative to the PWM to be generated
 			// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
