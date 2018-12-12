@@ -7,12 +7,15 @@
 
 #include <avr/io.h>
 
+typedef int bool;
+#define true 1
+#define false 0
 
 int main(void)
 {
-	// bool calibration = 1;
+	bool calibration = true;
 	
-	if(1/*calibration*/) {		// Is (Calibration) Mode or (Running) Mode?
+	if(calibration) {		// Is (Calibration) Mode or (Running) Mode?
 		// wait for button press, if clicked:
 		// car is moving and scanning the borders, limits should be set according to Cartesian coordinates:
 			//* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
@@ -25,7 +28,7 @@ int main(void)
 			
 		//calibration = 0;		// After calibration -> turn to (Running) Mode.
 	}
-	else if(1/*!calibration*/) {	// else if (Running) Mode:
+	else if(!calibration) {	// else if (Running) Mode:
 		// wait for button press, if clicked:
 			// Calculate (toBeTraveledDistance) relative to the PWM to be generated
 			// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
