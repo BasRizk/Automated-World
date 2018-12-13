@@ -39,6 +39,15 @@
 #define GYRO_THRESHOLD 10
 
 float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
+float pitch = 0;
+float roll = 0;
+float yaw = 0;
+float v_pitch;
+float v_roll;
+float v_yaw;
+float a_pitch;
+float a_roll;
+float a_yaw;
 
 
 enum MOTOR {A, B};
@@ -77,6 +86,21 @@ int main(void)
 		// GYROSCOPE LOGIC
 		MPU_Read_RawValue();
 		
+		// Calculating Pitch, roll and yaw
+		v_pitch=(Gyro_x/131);
+		 if(v_pitch==-1)
+			v_pitch=0;
+		v_roll=(Gyro_y/131);
+		if(v_roll==1)
+			v_roll=0;
+		v_yaw=Gyro_z/131;
+		a_pitch=(v_pitch*0.046);	
+		a_roll=(v_roll*0.046);
+		a_yaw=(v_yaw*0.045);
+		pitch= pitch + a_pitch;
+		roll= roll + a_roll;
+		yaw= yaw + a_yaw;
+			 
 		gyro_x_calc = Gyro_x/16.4;
 		gyro_y_calc = Gyro_y/16.4;
 		gyro_z_calc = Gyro_z/16.4;
