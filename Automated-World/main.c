@@ -11,7 +11,9 @@
 #include <util/delay.h>
 #include <stdlib.h>		/* Include standard library file */
 #include <stdio.h>		/* Include standard I/O library file */
-#include "uart.h"
+#include "MPU6050_res_define.h"							/* Include MPU6050 register define file */
+#include "I2C_Master_H_file.h"							/* Include I2C Master header file */
+#include "uart.h"										/* Include USART header file */
 
 #define bit_get(p,m) ((p) & (m))
 #define bit_set(p,m) ((p) |= (m))
@@ -34,34 +36,83 @@
 
 #define DUTY_CYCLE_MED 102
 #define MOTOR_SPEED_HIGH 180 
+#define GYRO_THRESHOLD 10
+
+float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
+
 
 enum MOTOR {A, B};
 enum DIRECTION {BACKWARD, FORWARD};
 
-void input_key_logic(char input);
-void init_uart();
-void init_pwm_config();
+void Init_MPU6050();
+void Init_UART();
+void Init_PWM_Config();
+
+void MPU_Start_Loc();
+void MPU_Read_RawValue();
+void input_key_logic();
 void move(enum MOTOR, enum DIRECTION, unsigned char speed);
+
 
 int main(void)
 {
-	init_pwm_config();
+	_delay_ms(1000);
+	
+	I2C_Init();											/* Initialize I2C */
+	Init_MPU6050();										/* Initialize MPU6050 */
+	Init_PWM_Config();
 	move(A, BACKWARD, 0);
 	move(B, BACKWARD, 0);
-	
-	uart_init();
+	uart_init();										/* Initialize UART with 9600 baud rate */
 	stdout = &uart_output;
 	stdin  = &uart_input;
+	
 
-	char input;
-	while(1) {
-		input_key_logic(input);
+	float Xg=0,Yg=0,Zg=0;
+	char buffer[20], float_[10];
+	float gyro_x_calc, gyro_y_calc, gyro_z_calc;
+
+	while(1) {		
+		
+		// GYROSCOPE LOGIC
+		MPU_Read_RawValue();
+		
+		gyro_x_calc = Gyro_x/16.4;
+		gyro_y_calc = Gyro_y/16.4;
+		gyro_z_calc = Gyro_z/16.4;
+		
+		if((gyro_x_calc > GYRO_THRESHOLD) || (gyro_x_calc < -GYRO_THRESHOLD)) {
+			Xg += gyro_x_calc;
+		}
+		
+		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
+			Yg += gyro_y_calc;
+		}
+		
+		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
+			Zg += gyro_z_calc;
+		}
+		
+		dtostrf( Xg, 3, 2, float_ );
+		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+		
+		dtostrf( Yg, 3, 2, float_ );
+		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+		
+		dtostrf( Zg, 3, 2, float_ );
+		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
+		printf(buffer);
+		
+		//input_key_logic();
 	}
 	
 	return 0;
 }
-
-void input_key_logic(char input) {
+ 
+void input_key_logic() {
+	char input;
 	_delay_ms(250);
 	input = getchar();
 	if(input == 'w') {
@@ -104,7 +155,56 @@ void move(enum MOTOR motor, enum DIRECTION direction, unsigned char speed) {
 		}
 }
 
-void init_pwm_config() {
+void MPU_Start_Loc()
+{
+	I2C_Start_Wait(0xD0);								/* I2C start with device write address */
+	I2C_Write(ACCEL_XOUT_H);							/* Write start location address from where to read */
+	I2C_Repeated_Start(0xD1);							/* I2C start with device read address */
+}
+
+void MPU_Read_RawValue()
+{
+	MPU_Start_Loc();									/* Read Gyro values */
+	Acc_x = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
+	Acc_y = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
+	Acc_z = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
+	Temperature = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
+	Gyro_x = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
+	Gyro_y = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
+	Gyro_z = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Nack());
+	I2C_Stop();
+}
+
+void Init_MPU6050()										/* Gyro initialization function */
+{
+	_delay_ms(150);										/* Power up time >100ms */
+	I2C_Start_Wait(0xD0);								/* Start with device write address */
+	I2C_Write(SMPLRT_DIV);								/* Write to sample rate register */
+	I2C_Write(0x07);									/* 1KHz sample rate */
+	I2C_Stop();
+
+	I2C_Start_Wait(0xD0);
+	I2C_Write(PWR_MGMT_1);								/* Write to power management register */
+	I2C_Write(0x01);									/* X axis gyroscope reference frequency */
+	I2C_Stop();
+
+	I2C_Start_Wait(0xD0);
+	I2C_Write(CONFIG);									/* Write to Configuration register */
+	I2C_Write(0x00);									/* Fs = 8KHz */
+	I2C_Stop();
+
+	I2C_Start_Wait(0xD0);
+	I2C_Write(GYRO_CONFIG);								/* Write to Gyro configuration register */
+	I2C_Write(0x18);									/* Full scale range +/- 2000 degree/C */
+	I2C_Stop();
+
+	I2C_Start_Wait(0xD0);
+	I2C_Write(INT_ENABLE);								/* Write to interrupt enable register */
+	I2C_Write(0x01);
+	I2C_Stop();
+}
+
+void Init_PWM_Config() {
 	// #PIN 2: A-1B #PIN 6: A-1A
 	// #PIN 4: B-1B #PIN 5: B-1A
 	
