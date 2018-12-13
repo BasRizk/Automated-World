@@ -2,17 +2,16 @@
  * Automated-World.c
  *
  * Created: 12/12/2018 1:54:37 PM
- * Author : mikel
+ * Author : Kiss My Keyboard Team
  */ 
 
 #define F_CPU 8000000UL
 #include <avr/io.h>
 #include <stdbool.h>
 #include <util/delay.h>
-// More libraries for now
-#include <inttypes.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <stdlib.h>		/* Include standard library file */
+#include <stdio.h>		/* Include standard I/O library file */
+#include "uart.h"
 
 #define bit_get(p,m) ((p) & (m))
 #define bit_set(p,m) ((p) |= (m))
@@ -29,49 +28,62 @@
 #define corner_4_x 6
 #define corner_4_y 7
 
+// BITS MACROS
 #define A_DIR_BIT 2
 #define B_DIR_BIT 4
+
+#define DUTY_CYCLE_MED 102
+#define MOTOR_SPEED_HIGH 180 
 
 enum MOTOR {A, B};
 enum DIRECTION {BACKWARD, FORWARD};
 
-void initPWMConfig();
+void input_key_logic(char input);
+void init_uart();
+void init_pwm_config();
 void move(enum MOTOR, enum DIRECTION, unsigned char speed);
 
 int main(void)
 {
-	initPWMConfig();
+	init_pwm_config();
+	move(A, BACKWARD, 0);
+	move(B, BACKWARD, 0);
 	
-	move(A, FORWARD, 102);
-	move(B, BACKWARD, 102);
+	uart_init();
+	stdout = &uart_output;
+	stdin  = &uart_input;
+
+	char input;
+	while(1) {
+		input_key_logic(input);
+	}
 	
-	while(1);
 	return 0;
 }
 
-void initPWMConfig() {
-	// #PIN 2: A-1B #PIN 6: A-1A
-	// #PIN 4: B-1B #PIN 5: B-1A
-	
-	DDRD |= 0b01110100;
-	
-	_delay_ms(150);
-	OCR0A = 0;
-	OCR0B = 0;
-	
-	OCR0A = 102;
-	OCR0B = 102;
-	bit_set(PORTD, BIT(A_DIR_BIT));
-	bit_set(PORTD, BIT(B_DIR_BIT));
-	TCCR0A = 0b10100001;
-	TCCR0B = 0b00000001;
+void input_key_logic(char input) {
+	_delay_ms(250);
+	input = getchar();
+	if(input == 'w') {
+		move(A, FORWARD, 256 - MOTOR_SPEED_HIGH);
+		move(B, FORWARD, 256 - MOTOR_SPEED_HIGH);
+		} else if (input == 's') {
+		move(A, BACKWARD, MOTOR_SPEED_HIGH);
+		move(B, BACKWARD, MOTOR_SPEED_HIGH);
+		} else if(input == 'd') {
+		move(A, FORWARD, MOTOR_SPEED_HIGH);
+		move(B, BACKWARD, 256-MOTOR_SPEED_HIGH);
+		} else if(input == 'a') {
+		move(A, BACKWARD, 256- MOTOR_SPEED_HIGH);
+		move(B, FORWARD, MOTOR_SPEED_HIGH);
+		} else if(input == 'p') {
+		move(A, BACKWARD, 0);
+		move(B, BACKWARD, 0);
+		} else {
+		printf("Undefined Key!\n");
+	}
 }
 
-/**
- * @param Motor A or B
- * @param Speed
- * @param Direction
- */
 void move(enum MOTOR motor, enum DIRECTION direction, unsigned char speed) {
 	switch(motor) {
 		case A:	if(direction == BACKWARD) {
@@ -90,6 +102,24 @@ void move(enum MOTOR motor, enum DIRECTION direction, unsigned char speed) {
 				OCR0A = speed;
 				break;
 		}
+}
+
+void init_pwm_config() {
+	// #PIN 2: A-1B #PIN 6: A-1A
+	// #PIN 4: B-1B #PIN 5: B-1A
+	
+	DDRD |= 0b01110100;
+	
+	_delay_ms(150);
+	OCR0A = 0;
+	OCR0B = 0;
+	
+	OCR0A = 102;
+	OCR0B = 102;
+	bit_set(PORTD, BIT(A_DIR_BIT));
+	bit_set(PORTD, BIT(B_DIR_BIT));
+	TCCR0A = 0b10100001;
+	TCCR0B = 0b00000001;
 }
 
 void main_logic_commented() {
