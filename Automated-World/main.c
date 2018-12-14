@@ -48,7 +48,9 @@ float v_yaw;
 float a_pitch;
 float a_roll;
 float a_yaw;
-
+float Xg=0,Yg=0,Zg=0;
+char buffer[20], float_[10];
+float gyro_x_calc=0, gyro_y_calc=0, gyro_z_calc=0;
 
 enum MOTOR {A, B};
 enum DIRECTION {BACKWARD, FORWARD};
@@ -58,6 +60,7 @@ void Init_UART();
 void Init_PWM_Config();
 
 void MPU_Start_Loc();
+void MPU_Perform_Calc();
 void MPU_Read_RawValue();
 void input_key_logic();
 void move(enum MOTOR, enum DIRECTION, unsigned char speed);
@@ -77,57 +80,13 @@ int main(void)
 	stdin  = &uart_input;
 	
 
-	float Xg=0,Yg=0,Zg=0;
-	char buffer[20], float_[10];
-	float gyro_x_calc, gyro_y_calc, gyro_z_calc;
+
 
 	while(1) {		
 		
 		// GYROSCOPE LOGIC
 		MPU_Read_RawValue();
-		
-		// Calculating Pitch, roll and yaw
-		v_pitch=(Gyro_x/131);
-		 if(v_pitch==-1)
-			v_pitch=0;
-		v_roll=(Gyro_y/131);
-		if(v_roll==1)
-			v_roll=0;
-		v_yaw=Gyro_z/131;
-		a_pitch=(v_pitch*0.046);	
-		a_roll=(v_roll*0.046);
-		a_yaw=(v_yaw*0.045);
-		pitch= pitch + a_pitch;
-		roll= roll + a_roll;
-		yaw= yaw + a_yaw;
-			 
-		gyro_x_calc = Gyro_x/131;
-		gyro_y_calc = Gyro_y/131;
-		gyro_z_calc = Gyro_z/131;
-		
-		if(((gyro_x_calc +0.078) > GYRO_THRESHOLD) || ((gyro_x_calc +0.078) < -GYRO_THRESHOLD)) {
-			Xg += (gyro_x_calc/2.5) +0.078;
-		}
-		
-		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
-			Yg += gyro_y_calc;
-		}
-		
-		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
-			Zg += gyro_z_calc;
-		}
-		
-		dtostrf( Xg, 3, 2, float_ );
-		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-		
-		dtostrf( Yg, 3, 2, float_ );
-		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-		
-		dtostrf( Zg, 3, 2, float_ );
-		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
-		printf(buffer);
+		MPU_Perform_Calc();
 		
 		//input_key_logic();
 	}
@@ -184,6 +143,54 @@ void MPU_Start_Loc()
 	I2C_Start_Wait(0xD0);								/* I2C start with device write address */
 	I2C_Write(ACCEL_XOUT_H);							/* Write start location address from where to read */
 	I2C_Repeated_Start(0xD1);							/* I2C start with device read address */
+}
+
+void MPU_Perform_Calc()
+{
+		// Calculating Pitch, roll and yaw
+		v_pitch=(Gyro_x/131);
+		if(v_pitch==-1)
+		v_pitch=0;
+		v_roll=(Gyro_y/131);
+		if(v_roll==1)
+		v_roll=0;
+		v_yaw=Gyro_z/131;
+		a_pitch=(v_pitch*0.046);
+		a_roll=(v_roll*0.046);
+		a_yaw=(v_yaw*0.045);
+		pitch= pitch + a_pitch;
+		roll= roll + a_roll;
+		yaw= yaw + a_yaw;
+			
+		gyro_x_calc = Gyro_x/131;
+		gyro_y_calc = Gyro_y/131;
+		gyro_z_calc = Gyro_z/131;
+			
+		if(((gyro_x_calc +0.078) > GYRO_THRESHOLD) || ((gyro_x_calc +0.078) < -GYRO_THRESHOLD)) {
+			Xg += (gyro_x_calc/2.5) +0.078;
+		}
+			
+		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
+			Yg += gyro_y_calc;
+		}
+			
+		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
+			Zg += gyro_z_calc;
+		}
+		
+		/*	
+		dtostrf( Xg, 3, 2, float_ );
+		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+			
+		dtostrf( Yg, 3, 2, float_ );
+		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+			
+		dtostrf( Zg, 3, 2, float_ );
+		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
+		printf(buffer);
+		*/
 }
 
 void MPU_Read_RawValue()
