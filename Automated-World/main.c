@@ -101,23 +101,24 @@ void MOTORS_serial_input_logic() {
 	char input;
 	input = getchar();
 
-	if(input == 'w') {
+	if(input == 'w' || input == 'F') {
 		MOTORS_move_forward();
-		_delay_ms(750);
-		} else if (input == 's') {
+		//_delay_ms(100);
+		} else if (input == 's' || input == 'B') {
 		MOTORS_move_backward();
-		_delay_ms(750);
-		} else if(input == 'd') {
+		//_delay_ms(50);
+		} else if(input == 'd' || input == 'R') {
 		MOTORS_move_right();
-		_delay_ms(500);
-		} else if(input == 'a') {
+		//_delay_ms(100);
+		} else if(input == 'a' || input == 'L') {
 		MOTORS_move_left();
-		_delay_ms(500);
-		} else if(input == 'p') {
+		//_delay_ms(100);
+		} else if(input == 'p' || input == 'S' ) {
 		MOTORS_stop();
 		} else {
 		printf("Undefined Key!\n");
 	}
+	_delay_ms(50);
 	MOTORS_stop();
 
 }
