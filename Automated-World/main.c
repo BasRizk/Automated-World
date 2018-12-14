@@ -36,7 +36,7 @@
 
 #define DUTY_CYCLE_MED 102
 #define MOTOR_SPEED_HIGH 180 
-#define GYRO_THRESHOLD 0.35
+#define GYRO_THRESHOLD 0.0
 
 float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
 float pitch = 0;
@@ -65,7 +65,7 @@ void move(enum MOTOR, enum DIRECTION, unsigned char speed);
 
 int main(void)
 {
-	_delay_ms(1000);
+	_delay_ms(10000);
 	
 	I2C_Init();											/* Initialize I2C */
 	Init_MPU6050();										/* Initialize MPU6050 */
@@ -105,8 +105,8 @@ int main(void)
 		gyro_y_calc = Gyro_y/131;
 		gyro_z_calc = Gyro_z/131;
 		
-		if((gyro_x_calc > GYRO_THRESHOLD) || (gyro_x_calc < -GYRO_THRESHOLD)) {
-			Xg += gyro_x_calc/2.5;
+		if(((gyro_x_calc +0.078) > GYRO_THRESHOLD) || ((gyro_x_calc +0.078) < -GYRO_THRESHOLD)) {
+			Xg += (gyro_x_calc/2.5) +0.078;
 		}
 		
 		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
