@@ -328,8 +328,8 @@ void main_logic_commented() {
 		// wait for button press, if clicked:
 			
 			// Calculate (toBeTraveledDistance) relative to the PWM to be generated
-			toBeTraveled_X = get_X(gyro_x_calc);
-			toBeTraveled_Y = get_Y(gyro_x_calc);
+			toBeTraveled_X = get_X(Xg);
+			toBeTraveled_Y = get_Y(Xg);
 			
 			// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
 			toBePosition_X = current_x_pos + toBeTraveled_X;
