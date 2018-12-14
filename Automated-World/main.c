@@ -62,13 +62,14 @@ void Init_LineTracker_Config();
 void MPU_Start_Loc();
 void MPU_Perform_Calc();
 void MPU_Read_RawValue();
-void MOTORS_serial_input_logic();
+void serial_input_logic();
 void lineTracker();
 
 float get_X(float angle);
 float get_Y(float angle);
 
-
+enum GAME_MODE {CALIBRATION, RUNTIME} current_mode;
+	
 int main(void)
 {
 	_delay_ms(1000);
@@ -84,38 +85,50 @@ int main(void)
 	stdout = &uart_output;
 	stdin  = &uart_input;
 	
+	current_mode = CALIBRATION;
+	
 	while(1) {		
-		//lineTracker();
+		
+		if(CALIBRATION) {
+			lineTracker();
+		} else {
+			serial_input_logic();
+		}
 		// GYROSCOPE LOGIC
 		//MPU_Read_RawValue();
 		//MPU_Perform_Calc();
 		
-		MOTORS_serial_input_logic();
+		;
 	}
 	
 	return 0;
 }
 
 
-void MOTORS_serial_input_logic() {
+void serial_input_logic() 
+{
 	char input;
 	input = getchar();
 
-	if(input == 'w' || input == 'F') {
+	if (input == 'F') {
 		MOTORS_move_forward();
 		//_delay_ms(100);
-		} else if (input == 's' || input == 'B') {
+	} else if (input == 'B') {
 		MOTORS_move_backward();
 		//_delay_ms(50);
-		} else if(input == 'd' || input == 'R') {
+	} else if (input == 'R') {
 		MOTORS_move_right();
 		//_delay_ms(100);
-		} else if(input == 'a' || input == 'L') {
+	} else if (input == 'L') {
 		MOTORS_move_left();
 		//_delay_ms(100);
-		} else if(input == 'p' || input == 'S' ) {
+	} else if (input == 'S' ) {
 		MOTORS_stop();
-		} else {
+	} else if (input == 'W') {
+		current_mode = RUNTIME;
+	} else if (input == 'w') {
+		current_mode = CALIBRATION;
+	} else {
 		printf("Undefined Key!\n");
 	}
 	_delay_ms(50);
