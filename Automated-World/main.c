@@ -11,9 +11,18 @@
 #include <util/delay.h>
 #include <stdlib.h>		/* Include standard library file */
 #include <stdio.h>		/* Include standard I/O library file */
-#include "MPU6050_res_define.h"							/* Include MPU6050 register define file */
-#include "I2C_Master_H_file.h"							/* Include I2C Master header file */
-#include "uart.h"										/* Include USART header file */
+
+
+#include <avr/interrupt.h>
+#include <avr/pgmspace.h>
+#include <math.h>  //include lib math
+
+#include "mpu6050.h"
+
+#define UART_BAUD_RATE 9600
+#include "uart.h"
+
+
 
 #define bit_get(p,m) ((p) & (m))
 #define bit_set(p,m) ((p) |= (m))
@@ -53,86 +62,149 @@ float a_yaw;
 enum MOTOR {A, B};
 enum DIRECTION {BACKWARD, FORWARD};
 
-void Init_MPU6050();
-void Init_UART();
+//void Init_MPU6050();
+//void Init_UART();
 void Init_PWM_Config();
 
-void MPU_Start_Loc();
-void MPU_Read_RawValue();
+//void MPU_Start_Loc();
+//void MPU_Read_RawValue();
 void input_key_logic();
 void move(enum MOTOR, enum DIRECTION, unsigned char speed);
 
 
 int main(void)
 {
-	_delay_ms(1000);
-	
-	I2C_Init();											/* Initialize I2C */
-	Init_MPU6050();										/* Initialize MPU6050 */
-	Init_PWM_Config();
-	move(A, BACKWARD, 0);
-	move(B, BACKWARD, 0);
-	uart_init();										/* Initialize UART with 9600 baud rate */
-	stdout = &uart_output;
-	stdin  = &uart_input;
-	
+	#if MPU6050_GETATTITUDE == 0
+	int16_t ax = 0;
+	int16_t ay = 0;
+	int16_t az = 0;
+	int16_t gx = 0;
+	int16_t gy = 0;
+	int16_t gz = 0;
+	double axg = 0;
+	double ayg = 0;
+	double azg = 0;
+	double gxds = 0;
+	double gyds = 0;
+	double gzds = 0;
+	#endif
 
-	float Xg=0,Yg=0,Zg=0;
-	char buffer[20], float_[10];
-	float gyro_x_calc, gyro_y_calc, gyro_z_calc;
+	#if MPU6050_GETATTITUDE == 1 || MPU6050_GETATTITUDE == 2
+	long *ptr = 0;
+	double qw = 1.0f;
+	double qx = 0.0f;
+	double qy = 0.0f;
+	double qz = 0.0f;
+	double roll = 0.0f;
+	double pitch = 0.0f;
+	double yaw = 0.0f;
+	#endif
 
-	while(1) {		
-		
-		// GYROSCOPE LOGIC
-		MPU_Read_RawValue();
-		
-		// Calculating Pitch, roll and yaw
-		v_pitch=(Gyro_x/131);
-		 if(v_pitch==-1)
-			v_pitch=0;
-		v_roll=(Gyro_y/131);
-		if(v_roll==1)
-			v_roll=0;
-		v_yaw=Gyro_z/131;
-		a_pitch=(v_pitch*0.046);	
-		a_roll=(v_roll*0.046);
-		a_yaw=(v_yaw*0.045);
-		pitch= pitch + a_pitch;
-		roll= roll + a_roll;
-		yaw= yaw + a_yaw;
-			 
-		gyro_x_calc = Gyro_x/16.4;
-		gyro_y_calc = Gyro_y/16.4;
-		gyro_z_calc = Gyro_z/16.4;
-		
-		if((gyro_x_calc > GYRO_THRESHOLD) || (gyro_x_calc < -GYRO_THRESHOLD)) {
-			Xg += gyro_x_calc;
+	//init uart
+	uart_init(UART_BAUD_SELECT(UART_BAUD_RATE,F_CPU));
+
+	//init interrupt
+	sei();
+
+	//init mpu6050
+	mpu6050_init();
+	_delay_ms(50);
+
+	//init mpu6050 dmp processor
+	#if MPU6050_GETATTITUDE == 2
+	mpu6050_dmpInitialize();
+	mpu6050_dmpEnable();
+	_delay_ms(10);
+	#endif
+
+	for(;;) {
+		#if MPU6050_GETATTITUDE == 0
+		mpu6050_getRawData(&ax, &ay, &az, &gx, &gy, &gz);
+		mpu6050_getConvData(&axg, &ayg, &azg, &gxds, &gyds, &gzds);
+		#endif
+
+		#if MPU6050_GETATTITUDE == 1
+		mpu6050_getQuaternion(&qw, &qx, &qy, &qz);
+		mpu6050_getRollPitchYaw(&roll, &pitch, &yaw);
+		_delay_ms(10);
+		#endif
+
+		#if MPU6050_GETATTITUDE == 2
+		if(mpu6050_getQuaternionWait(&qw, &qx, &qy, &qz)) {
+			mpu6050_getRollPitchYaw(qw, qx, qy, qz, &roll, &pitch, &yaw);
 		}
-		
-		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
-			Yg += gyro_y_calc;
-		}
-		
-		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
-			Zg += gyro_z_calc;
-		}
-		
-		dtostrf( Xg, 3, 2, float_ );
-		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-		
-		dtostrf( Yg, 3, 2, float_ );
-		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-		
-		dtostrf( Zg, 3, 2, float_ );
-		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
-		printf(buffer);
-		
-		//input_key_logic();
+		_delay_ms(10);
+		#endif
+
+		#if MPU6050_GETATTITUDE == 0
+		char itmp[10];
+		ltoa(ax, itmp, 10); uart_putc(' '); uart_puts(itmp); uart_putc(' ');
+		ltoa(ay, itmp, 10); uart_putc(' '); uart_puts(itmp); uart_putc(' ');
+		ltoa(az, itmp, 10); uart_putc(' '); uart_puts(itmp); uart_putc(' ');
+		ltoa(gx, itmp, 10); uart_putc(' '); uart_puts(itmp); uart_putc(' ');
+		ltoa(gy, itmp, 10); uart_putc(' '); uart_puts(itmp); uart_putc(' ');
+		ltoa(gz, itmp, 10); uart_putc(' '); uart_puts(itmp); uart_putc(' ');
+		uart_puts("\r\n");
+
+		dtostrf(axg, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
+		dtostrf(ayg, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
+		dtostrf(azg, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
+		dtostrf(gxds, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
+		dtostrf(gyds, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
+		dtostrf(gzds, 3, 5, itmp); uart_puts(itmp); uart_putc(' ');
+		uart_puts("\r\n");
+
+		uart_puts("\r\n");
+
+		_delay_ms(1000);
+		#endif
+
+		#if MPU6050_GETATTITUDE == 1 || MPU6050_GETATTITUDE == 2
+
+		//quaternion
+		ptr = (long *)(&qw);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+		ptr = (long *)(&qx);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+		ptr = (long *)(&qy);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+		ptr = (long *)(&qz);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+
+		//roll pitch yaw
+		ptr = (long *)(&roll);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+		ptr = (long *)(&pitch);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+		ptr = (long *)(&yaw);
+		uart_putc(*ptr);
+		uart_putc(*ptr>>8);
+		uart_putc(*ptr>>16);
+		uart_putc(*ptr>>24);
+
+		uart_putc('\n');
+		#endif
+
 	}
-	
-	return 0;
+
 }
  
 void input_key_logic() {
@@ -179,54 +251,6 @@ void move(enum MOTOR motor, enum DIRECTION direction, unsigned char speed) {
 		}
 }
 
-void MPU_Start_Loc()
-{
-	I2C_Start_Wait(0xD0);								/* I2C start with device write address */
-	I2C_Write(ACCEL_XOUT_H);							/* Write start location address from where to read */
-	I2C_Repeated_Start(0xD1);							/* I2C start with device read address */
-}
-
-void MPU_Read_RawValue()
-{
-	MPU_Start_Loc();									/* Read Gyro values */
-	Acc_x = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
-	Acc_y = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
-	Acc_z = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
-	Temperature = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
-	Gyro_x = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
-	Gyro_y = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Ack());
-	Gyro_z = (((int)I2C_Read_Ack()<<8) | (int)I2C_Read_Nack());
-	I2C_Stop();
-}
-
-void Init_MPU6050()										/* Gyro initialization function */
-{
-	_delay_ms(150);										/* Power up time >100ms */
-	I2C_Start_Wait(0xD0);								/* Start with device write address */
-	I2C_Write(SMPLRT_DIV);								/* Write to sample rate register */
-	I2C_Write(0x07);									/* 1KHz sample rate */
-	I2C_Stop();
-
-	I2C_Start_Wait(0xD0);
-	I2C_Write(PWR_MGMT_1);								/* Write to power management register */
-	I2C_Write(0x01);									/* X axis gyroscope reference frequency */
-	I2C_Stop();
-
-	I2C_Start_Wait(0xD0);
-	I2C_Write(CONFIG);									/* Write to Configuration register */
-	I2C_Write(0x00);									/* Fs = 8KHz */
-	I2C_Stop();
-
-	I2C_Start_Wait(0xD0);
-	I2C_Write(GYRO_CONFIG);								/* Write to Gyro configuration register */
-	I2C_Write(0x18);									/* Full scale range +/- 2000 degree/C */
-	I2C_Stop();
-
-	I2C_Start_Wait(0xD0);
-	I2C_Write(INT_ENABLE);								/* Write to interrupt enable register */
-	I2C_Write(0x01);
-	I2C_Stop();
-}
 
 void Init_PWM_Config() {
 	// #PIN 2: A-1B #PIN 6: A-1A
