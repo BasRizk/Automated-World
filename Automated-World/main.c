@@ -36,7 +36,7 @@
 
 #define DUTY_CYCLE_MED 102
 #define MOTOR_SPEED_HIGH 180 
-#define GYRO_THRESHOLD 10
+#define GYRO_THRESHOLD 0.35
 
 float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
 float pitch = 0;
@@ -101,12 +101,12 @@ int main(void)
 		roll= roll + a_roll;
 		yaw= yaw + a_yaw;
 			 
-		gyro_x_calc = Gyro_x/16.4;
-		gyro_y_calc = Gyro_y/16.4;
-		gyro_z_calc = Gyro_z/16.4;
+		gyro_x_calc = Gyro_x/131;
+		gyro_y_calc = Gyro_y/131;
+		gyro_z_calc = Gyro_z/131;
 		
 		if((gyro_x_calc > GYRO_THRESHOLD) || (gyro_x_calc < -GYRO_THRESHOLD)) {
-			Xg += gyro_x_calc;
+			Xg += gyro_x_calc/2.5;
 		}
 		
 		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
