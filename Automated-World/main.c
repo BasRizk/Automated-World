@@ -83,7 +83,7 @@ float get_Y(float angle);
 
 int main(void)
 {
-	_delay_ms(10000);
+	_delay_ms(1000);
 	
 	I2C_Init();											/* Initialize I2C */
 	Init_MPU6050();										/* Initialize MPU6050 */
@@ -91,48 +91,18 @@ int main(void)
 	Init_LineTracker_Config();
 	move(A, BACKWARD, 0);
 	move(B, BACKWARD, 0);
+	//SERIAL_init(9600);
 	uart_init();										/* Initialize UART with 9600 baud rate */
 	stdout = &uart_output;
 	stdin  = &uart_input;
 	
 	while(1) {		
-		lineTracker();
+		//lineTracker();
 		// GYROSCOPE LOGIC
-		MPU_Read_RawValue();
-<<<<<<< HEAD
+		//MPU_Read_RawValue();
+		//MPU_Perform_Calc();
 		
-		gyro_x_calc = Gyro_x/16.4;
-		gyro_y_calc = Gyro_y/16.4;
-		gyro_z_calc = Gyro_z/16.4;
-		
-		if((gyro_x_calc > GYRO_THRESHOLD) || (gyro_x_calc < -GYRO_THRESHOLD)) {
-			Xg += gyro_x_calc;
-		}
-		
-		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
-			Yg += gyro_y_calc;
-		}
-		
-		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
-			Zg += gyro_z_calc;
-		}
-		
-		dtostrf( Xg, 3, 2, float_ );
-		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
-		//printf(buffer);
-		
-		dtostrf( Yg, 3, 2, float_ );
-		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
-		//printf(buffer);
-		
-		dtostrf( Zg, 3, 2, float_ );
-		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
-		//printf(buffer);
-=======
-		MPU_Perform_Calc();
->>>>>>> 8b2084c55be510984f1db337a1af92eb1d0ddfdc
-		
-		//input_key_logic();
+		input_key_logic();
 	}
 	
 	return 0;
@@ -140,8 +110,9 @@ int main(void)
  
 void input_key_logic() {
 	char input;
-	_delay_ms(250);
+	_delay_ms(150);
 	input = getchar();
+	//input = SERIAL_receiveBytePoll(1000);
 	if(input == 'w') {
 		move(A, FORWARD, 256 - MOTOR_SPEED_NORMAL_HI);
 		move(B, FORWARD, 256 - MOTOR_SPEED_NORMAL_HI);
@@ -347,6 +318,7 @@ void lineTracker(){
 		//printf("3\n");
 	//}
 	_delay_ms(50);
+}
 
 float get_X(float angle)
 {

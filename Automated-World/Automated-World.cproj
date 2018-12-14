@@ -133,6 +133,12 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AVRserial.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="AVRserial.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="I2C_Master_C_file.c">
       <SubType>compile</SubType>
     </Compile>
