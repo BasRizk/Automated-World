@@ -34,8 +34,13 @@
 #define A_DIR_BIT 2
 #define B_DIR_BIT 4
 
-#define DUTY_CYCLE_MED 102
-#define MOTOR_SPEED_HIGH 180 
+#define LEFT_LIGHT_SENSOR_BIT 0
+#define RIGHT_LIGHT_SENSOR_BIT 4
+
+
+#define MOTOR_SPEED_NORMAL_MED 102
+#define MOTOR_SPEED_NORMAL_HI 180
+#define MOTOR_SPEED_ROTATION_HI 230 
 #define GYRO_THRESHOLD 10
 
 float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
@@ -47,10 +52,12 @@ enum DIRECTION {BACKWARD, FORWARD};
 void Init_MPU6050();
 void Init_UART();
 void Init_PWM_Config();
+void Init_LineTracker_Config();
 
 void MPU_Start_Loc();
 void MPU_Read_RawValue();
 void input_key_logic();
+void lineTracker();
 void move(enum MOTOR, enum DIRECTION, unsigned char speed);
 
 
@@ -61,6 +68,7 @@ int main(void)
 	I2C_Init();											/* Initialize I2C */
 	Init_MPU6050();										/* Initialize MPU6050 */
 	Init_PWM_Config();
+	Init_LineTracker_Config();
 	move(A, BACKWARD, 0);
 	move(B, BACKWARD, 0);
 	uart_init();										/* Initialize UART with 9600 baud rate */
@@ -73,7 +81,7 @@ int main(void)
 	float gyro_x_calc, gyro_y_calc, gyro_z_calc;
 
 	while(1) {		
-		
+		lineTracker();
 		// GYROSCOPE LOGIC
 		MPU_Read_RawValue();
 		
@@ -95,15 +103,15 @@ int main(void)
 		
 		dtostrf( Xg, 3, 2, float_ );
 		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
-		printf(buffer);
+		//printf(buffer);
 		
 		dtostrf( Yg, 3, 2, float_ );
 		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
-		printf(buffer);
+		//printf(buffer);
 		
 		dtostrf( Zg, 3, 2, float_ );
 		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
-		printf(buffer);
+		//printf(buffer);
 		
 		//input_key_logic();
 	}
@@ -116,21 +124,21 @@ void input_key_logic() {
 	_delay_ms(250);
 	input = getchar();
 	if(input == 'w') {
-		move(A, FORWARD, 256 - MOTOR_SPEED_HIGH);
-		move(B, FORWARD, 256 - MOTOR_SPEED_HIGH);
-		} else if (input == 's') {
-		move(A, BACKWARD, MOTOR_SPEED_HIGH);
-		move(B, BACKWARD, MOTOR_SPEED_HIGH);
-		} else if(input == 'd') {
-		move(A, FORWARD, MOTOR_SPEED_HIGH);
-		move(B, BACKWARD, 256-MOTOR_SPEED_HIGH);
-		} else if(input == 'a') {
-		move(A, BACKWARD, 256- MOTOR_SPEED_HIGH);
-		move(B, FORWARD, MOTOR_SPEED_HIGH);
-		} else if(input == 'p') {
+		move(A, FORWARD, 256 - MOTOR_SPEED_NORMAL_HI);
+		move(B, FORWARD, 256 - MOTOR_SPEED_NORMAL_HI);
+	} else if (input == 's') {
+		move(A, BACKWARD, MOTOR_SPEED_NORMAL_HI);
+		move(B, BACKWARD, MOTOR_SPEED_NORMAL_HI);
+	} else if(input == 'd') {
+		move(A, FORWARD, MOTOR_SPEED_ROTATION_HI);
+		move(B, BACKWARD, 256-MOTOR_SPEED_ROTATION_HI);
+	} else if(input == 'a') {
+		move(A, BACKWARD, 256- MOTOR_SPEED_ROTATION_HI);
+		move(B, FORWARD, MOTOR_SPEED_ROTATION_HI);
+	} else if(input == 'p') {
 		move(A, BACKWARD, 0);
 		move(B, BACKWARD, 0);
-		} else {
+	} else {
 		printf("Undefined Key!\n");
 	}
 }
@@ -220,6 +228,57 @@ void Init_PWM_Config() {
 	bit_set(PORTD, BIT(B_DIR_BIT));
 	TCCR0A = 0b10100001;
 	TCCR0B = 0b00000001;
+}
+
+void Init_LineTracker_Config(){
+	// #PIN 14 : Left Sensor [PIN 8 in Arduino (PB0)
+	// #PIN 18 : Right Sensor [PIN 12 in Arduino (PB4)
+	
+	DDRB &= 0b11101110;
+	
+}
+
+void lineTracker(){
+	if(bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT)) && bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT))){
+		//move(A , FORWARD , 255 - MOTOR_SPEED_HIGH);
+		//move(B , FORWARD , 255 - MOTOR_SPEED_HIGH);
+		move(A , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
+		move(B , FORWARD , MOTOR_SPEED_ROTATION_HI);
+		printf("0\n");
+	}
+	else if (bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT)) && ~(bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT)))){
+		
+		move(A , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
+		move(B , FORWARD ,MOTOR_SPEED_ROTATION_HI);
+		printf("1\n");
+	}
+	else if (~(bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT))) && bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT))){
+		move(A , FORWARD , MOTOR_SPEED_ROTATION_HI);
+		move(B , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
+		
+		printf("2\n");
+	}
+	else if (~(bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT))) && (~bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT)))){
+		move(A , FORWARD , 255 - MOTOR_SPEED_NORMAL_HI);
+		move(B , FORWARD , 255 - MOTOR_SPEED_NORMAL_HI);
+		printf("3\n");
+	}
+
+
+
+	//if (bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT))){
+		//
+		//move(A , FORWARD , 255 - MOTOR_SPEED_HIGH);
+		//move(B , FORWARD , 255 - MOTOR_SPEED_HIGH);
+		//
+		//printf("2\n");
+	//}
+	//else {
+		//move(A , FORWARD , MOTOR_SPEED_HIGH);
+		//move(B , BACKWARD ,255 - MOTOR_SPEED_HIGH);
+		//printf("3\n");
+	//}
+	_delay_ms(50);
 }
 
 void main_logic_commented() {
