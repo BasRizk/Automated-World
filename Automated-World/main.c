@@ -13,7 +13,8 @@
 #include <stdio.h>		/* Include standard I/O library file */
 #include "MPU6050_res_define.h"							/* Include MPU6050 register define file */
 #include "I2C_Master_H_file.h"							/* Include I2C Master header file */
-#include "uart.h"										/* Include USART header file */
+#include "UART_H.h"										/* Include USART header file */
+#include "MOTORS_Controller_H.h"						
 
 #define bit_get(p,m) ((p) & (m))
 #define bit_set(p,m) ((p) |= (m))
@@ -30,18 +31,9 @@
 #define corner_4_x 6
 #define corner_4_y 7
 
-// BITS MACROS
-#define A_DIR_BIT 2
-#define B_DIR_BIT 4
-
 
 #define LEFT_LIGHT_SENSOR_BIT 0
 #define RIGHT_LIGHT_SENSOR_BIT 4
-
-
-#define MOTOR_SPEED_NORMAL_MED 102
-#define MOTOR_SPEED_NORMAL_HI 180
-#define MOTOR_SPEED_ROTATION_HI 230 
 
 #define GYRO_THRESHOLD 0.0
 
@@ -62,9 +54,6 @@ float gyro_x_calc=0, gyro_y_calc=0, gyro_z_calc=0;
 
 float unit_step = 1;
 
-enum MOTOR {A, B};
-enum DIRECTION {BACKWARD, FORWARD};
-
 void Init_MPU6050();
 void Init_UART();
 void Init_PWM_Config();
@@ -73,9 +62,8 @@ void Init_LineTracker_Config();
 void MPU_Start_Loc();
 void MPU_Perform_Calc();
 void MPU_Read_RawValue();
-void input_key_logic();
+void MOTORS_serial_input_logic();
 void lineTracker();
-void move(enum MOTOR, enum DIRECTION, unsigned char speed);
 
 float get_X(float angle);
 float get_Y(float angle);
@@ -86,13 +74,13 @@ int main(void)
 	_delay_ms(1000);
 	
 	I2C_Init();											/* Initialize I2C */
-	Init_MPU6050();										/* Initialize MPU6050 */
-	Init_PWM_Config();
-	Init_LineTracker_Config();
-	move(A, BACKWARD, 0);
-	move(B, BACKWARD, 0);
-	//SERIAL_init(9600);
 	uart_init();										/* Initialize UART with 9600 baud rate */
+	
+	Init_MPU6050();										/* Initialize MPU6050 */
+	
+	MOTORS_Init_Config();
+	Init_LineTracker_Config();
+	
 	stdout = &uart_output;
 	stdin  = &uart_input;
 	
@@ -102,56 +90,38 @@ int main(void)
 		//MPU_Read_RawValue();
 		//MPU_Perform_Calc();
 		
-		input_key_logic();
+		MOTORS_serial_input_logic();
 	}
 	
 	return 0;
 }
- 
-void input_key_logic() {
+
+
+void MOTORS_serial_input_logic() {
 	char input;
-	_delay_ms(150);
 	input = getchar();
-	//input = SERIAL_receiveBytePoll(1000);
+
 	if(input == 'w') {
-		move(A, FORWARD, 256 - MOTOR_SPEED_NORMAL_HI);
-		move(B, FORWARD, 256 - MOTOR_SPEED_NORMAL_HI);
-	} else if (input == 's') {
-		move(A, BACKWARD, MOTOR_SPEED_NORMAL_HI);
-		move(B, BACKWARD, MOTOR_SPEED_NORMAL_HI);
-	} else if(input == 'd') {
-		move(A, FORWARD, MOTOR_SPEED_ROTATION_HI);
-		move(B, BACKWARD, 256-MOTOR_SPEED_ROTATION_HI);
-	} else if(input == 'a') {
-		move(A, BACKWARD, 256- MOTOR_SPEED_ROTATION_HI);
-		move(B, FORWARD, MOTOR_SPEED_ROTATION_HI);
-	} else if(input == 'p') {
-		move(A, BACKWARD, 0);
-		move(B, BACKWARD, 0);
-	} else {
+		MOTORS_move_forward();
+		_delay_ms(750);
+		} else if (input == 's') {
+		MOTORS_move_backward();
+		_delay_ms(750);
+		} else if(input == 'd') {
+		MOTORS_move_right();
+		_delay_ms(500);
+		} else if(input == 'a') {
+		MOTORS_move_left();
+		_delay_ms(500);
+		} else if(input == 'p') {
+		MOTORS_stop();
+		} else {
 		printf("Undefined Key!\n");
 	}
+	MOTORS_stop();
+
 }
 
-void move(enum MOTOR motor, enum DIRECTION direction, unsigned char speed) {
-	switch(motor) {
-		case A:	if(direction == BACKWARD) {
-					bit_clear(PORTD, BIT(A_DIR_BIT));
-				} else {
-					bit_set(PORTD, BIT(A_DIR_BIT));
-				}
-				OCR0B = speed;
-				break;
-		
-		case B:	if(direction == BACKWARD) {
-					bit_clear(PORTD, BIT(B_DIR_BIT));
-				} else {
-					bit_set(PORTD, BIT(B_DIR_BIT));
-				}
-				OCR0A = speed;
-				break;
-		}
-}
 
 void MPU_Start_Loc()
 {
@@ -248,24 +218,6 @@ void Init_MPU6050()										/* Gyro initialization function */
 	I2C_Write(INT_ENABLE);								/* Write to interrupt enable register */
 	I2C_Write(0x01);
 	I2C_Stop();
-}
-
-void Init_PWM_Config() {
-	// #PIN 2: A-1B #PIN 6: A-1A
-	// #PIN 4: B-1B #PIN 5: B-1A
-	
-	DDRD |= 0b01110100;
-	
-	_delay_ms(150);
-	OCR0A = 0;
-	OCR0B = 0;
-	
-	OCR0A = 102;
-	OCR0B = 102;
-	bit_set(PORTD, BIT(A_DIR_BIT));
-	bit_set(PORTD, BIT(B_DIR_BIT));
-	TCCR0A = 0b10100001;
-	TCCR0B = 0b00000001;
 }
 
 
