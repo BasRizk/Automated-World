@@ -35,7 +35,7 @@
 #define LEFT_LIGHT_SENSOR_BIT 0
 #define RIGHT_LIGHT_SENSOR_BIT 4
 
-#define GYRO_THRESHOLD 0.0
+#define GYRO_THRESHOLD 0.3
 
 
 float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
@@ -85,20 +85,36 @@ int main(void)
 	stdout = &uart_output;
 	stdin  = &uart_input;
 	
-	current_mode = CALIBRATION;
+	current_mode = RUNTIME;
 	
 	while(1) {		
 		
-		if(CALIBRATION) {
+		if(current_mode == CALIBRATION) {
 			lineTracker();
-		} else {
+		} else {	
 			serial_input_logic();
 		}
-		// GYROSCOPE LOGIC
-		//MPU_Read_RawValue();
-		//MPU_Perform_Calc();
 		
-		;
+		// GYROSCOPE LOGIC
+		MPU_Read_RawValue();
+		MPU_Perform_Calc();
+		
+		
+		dtostrf( Xg, 3, 2, float_ );
+		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+			
+		dtostrf( Yg, 3, 2, float_ );
+		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+			
+		dtostrf( Zg, 3, 2, float_ );
+		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
+		printf(buffer);
+		
+		MOTORS_stop();
+		_delay_ms(20);
+		
 	}
 	
 	return 0;
@@ -131,11 +147,9 @@ void serial_input_logic()
 	} else {
 		printf("Undefined Key!\n");
 	}
-	_delay_ms(50);
-	MOTORS_stop();
+	
 
 }
-
 
 void MPU_Start_Loc()
 {
@@ -176,20 +190,6 @@ void MPU_Perform_Calc()
 		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
 			Zg += gyro_z_calc;
 		}
-		
-		/*	
-		dtostrf( Xg, 3, 2, float_ );
-		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-			
-		dtostrf( Yg, 3, 2, float_ );
-		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-			
-		dtostrf( Zg, 3, 2, float_ );
-		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
-		printf(buffer);
-		*/
 }
 
 void MPU_Read_RawValue()
