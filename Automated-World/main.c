@@ -33,10 +33,33 @@
 #define corner_4_y 7
 
 
-#define LEFT_LIGHT_SENSOR_BIT 0
-#define RIGHT_LIGHT_SENSOR_BIT 4
+#define LEFT_IR_SENSOR_BIT 0
+#define RIGHT_IR_SENSOR_BIT 4
+#define LED_DISTANCE_BIT 5
+#define LED_OUT_OF_BOX_BIT 1
+#define RESET_POSITION_BUTTON_BIT 2
 
 #define GYRO_THRESHOLD 0.3
+
+void MPU_Start_Loc();
+void MPU_Perform_Calc();
+void MPU_Read_RawValue();
+void Init_MPU6050();
+void Init_UART();
+void Init_PWM_Config();
+
+void enable_distance_timer(bool true_val);
+float get_X(float angle);
+float get_Y(float angle);
+
+void main_logic();
+void serial_input_logic();
+void lineTracker();
+void Init_LineTracker_Config();
+void reset_coordinates();
+void check_switch_reset_coordinates();
+void Init_Buttons();
+void Init_LEDS();
 
 
 float Acc_x,Acc_y,Acc_z,Temperature,Gyro_x,Gyro_y,Gyro_z;
@@ -54,11 +77,12 @@ char buffer[20], float_[10];
 float gyro_x_calc=0, gyro_y_calc=0, gyro_z_calc=0;
 
 
-bool calibration = true;
 volatile float current_x_pos = 0;
 float current_y_pos = 0;
 volatile float past_x_pos = 0;
 float past_y_pos = 0;
+
+int num_of_boundaries_set;
 float boundries[] = {0,0,0,0,0,0,0,0};
 
 volatile float toBeTraveled_X = 0;
@@ -70,87 +94,167 @@ volatile bool isCarMovementAllowed = true;
 
 float unit_step = 1;
 
-void Init_MPU6050();
-void Init_UART();
-void Init_PWM_Config();
-void Init_LineTracker_Config();
-
-void MPU_Start_Loc();
-void MPU_Perform_Calc();
-void MPU_Read_RawValue();
-void serial_input_logic();
-void lineTracker();
-void distance_calc_Init();
-
-float get_X(float angle);
-float get_Y(float angle);
-
 enum GAME_MODE {CALIBRATION, RUNTIME} current_mode;
+
+volatile long travelled_distance;
 	
 int main(void)
 {
 	_delay_ms(1000);
 	
+	Init_Buttons();
+	Init_LEDS();
+	
 	I2C_Init();											/* Initialize I2C */
 	uart_init();										/* Initialize UART with 9600 baud rate */
 	
-	Init_MPU6050();										/* Initialize MPU6050 */
-	distance_calc_Init();
-	
-	MOTORS_Init_Config();
-	Init_LineTracker_Config();
-	
+	Init_MPU6050();										/* Initialize MPU6050 */	
+	MOTORS_Init_Config();	
 	stdout = &uart_output;
 	stdin  = &uart_input;
 	
-	current_mode = RUNTIME;
-	
+	current_mode = CALIBRATION;
+	num_of_boundaries_set = 0;
 	sei();
 	
+	travelled_distance = 0;
 	while(1) {		
-		
-		if(current_mode == CALIBRATION) {
-			lineTracker();
-		} else {	
-			serial_input_logic();
-		}
-		
-		// GYROSCOPE LOGIC
-		MPU_Read_RawValue();
-		MPU_Perform_Calc();
-		
-		
-		dtostrf( Xg, 3, 2, float_ );
-		sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-			
-		dtostrf( Yg, 3, 2, float_ );
-		sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
-		printf(buffer);
-			
-		dtostrf( Zg, 3, 2, float_ );
-		sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
-		printf(buffer);
-		
-		MOTORS_stop();
-		_delay_ms(20);
-		
+		main_logic();
 	}
 	
 	return 0;
 }
 
+void main_logic() {
+	_delay_ms(20);
+	if(current_mode == CALIBRATION) 
+	{
+		if(num_of_boundaries_set >= 4)
+		{
+			num_of_boundaries_set = 0;
+		}
+		lineTracker();
+	}
+	else
+	{	
+		serial_input_logic();
+			
+	}
+	
+	// GYROSCOPE READINGS
+	MPU_Read_RawValue();
+	MPU_Perform_Calc();
+	
+	if(current_mode == CALIBRATION) {
+		//* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
+		switch(num_of_boundaries_set) {
+			case 0: boundries[corner_1_x] = 0;
+					boundries[corner_1_y] = 0;
+					travelled_distance = 0;
+					num_of_boundaries_set++;
+					PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
+					Xg = 0;
+					break;
+			
+			case 1:	if(Xg >= 30 && Xg < 60) {
+						boundries[corner_2_x] = travelled_distance;
+						boundries[corner_2_y] = 0;
+					} else if (Xg >= 60) {
+						travelled_distance = 0;
+						num_of_boundaries_set++;
+						Xg = 0;
+						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
+					}
+					break;
+			
+			case 2: if(Xg >= (90 + 30) && Xg < (90 + 60) ) {
+						boundries[corner_3_x] = boundries[corner_2_x];
+						boundries[corner_3_y] = travelled_distance;
+					} else if (Xg >= (90 + 60) ) {
+						travelled_distance = 0;
+						num_of_boundaries_set++;
+						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
 
-void serial_input_logic() 
+					}
+					break;
+					
+			case 3: if(Xg >= (180 + 30) && Xg < (180 + 60) ) {
+						boundries[corner_4_x] = 0;
+						boundries[corner_4_y] = boundries[corner_3_y];
+					} else if (Xg >= (180 + 60) ) {
+						travelled_distance = 0;
+						num_of_boundaries_set++;
+						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
+					}
+					break;
+					
+			case 4: current_mode = RUNTIME;
+			
+			//* Phase 6: Rotate car and move anywhere inside the closed rectangle. (Move by hand and press reset button)
+
+		}	
+		
+	} else {
+		
+		// Calculate (toBeTraveledDistance) relative to the PWM to be generated
+		toBeTraveled_X = get_X(Xg);
+		toBeTraveled_Y = get_Y(Xg);
+		
+		// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
+		toBePosition_X = current_x_pos + travelled_distance*toBeTraveled_X;
+		toBePosition_Y = current_y_pos + travelled_distance*toBeTraveled_Y;
+		travelled_distance = 0;
+		
+		// if PositionToBeAt in &bounds:
+		
+		current_x_pos = toBePosition_X;
+		current_y_pos = toBePosition_Y;
+		
+		if (toBePosition_X < boundries[corner_2_x] && toBePosition_Y < boundries[corner_3_y]) 
+		{	
+			// Generate PWM accordingly and move car. (Already Generated)
+			PORTB = (0 << LED_OUT_OF_BOX_BIT);
+
+		}
+		else 
+		{
+			// Stop Car and (flash lights accordingly)
+			PORTB = (1 << LED_OUT_OF_BOX_BIT);
+			
+		}
+	}
+	
+	/*
+	dtostrf( Xg, 3, 2, float_ );
+	sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
+	printf(buffer);
+	
+	dtostrf( Yg, 3, 2, float_ );
+	sprintf(buffer," Gy = %s%c/s\t",float_,0xF8);
+	printf(buffer);
+	
+	dtostrf( Zg, 3, 2, float_ );
+	sprintf(buffer," Gz = %s%c/s\r\n",float_,0xF8);
+	printf(buffer);
+	
+	*/
+	enable_distance_timer(false);
+	_delay_ms(50);
+	MOTORS_stop();
+	
+}
+
+void serial_input_logic()
 {
 	char input;
 	input = getchar();
 
 	if (input == 'F') {
 		MOTORS_move_forward();
-		//_delay_ms(100);
+		enable_distance_timer(true);
 	} else if (input == 'B') {
 		MOTORS_move_backward();
+		enable_distance_timer(true);
 		//_delay_ms(50);
 	} else if (input == 'R') {
 		MOTORS_move_right();
@@ -164,13 +268,136 @@ void serial_input_logic()
 		current_mode = RUNTIME;
 	} else if (input == 'w') {
 		current_mode = CALIBRATION;
+	} else if (input == 'u' || input == 'U') {
+		reset_coordinates();
 	} else {
 		printf("Undefined Key!\n");
 	}
-	
 
 }
 
+void reset_coordinates() {
+	Xg = 0;
+	Yg = 0;
+	Zg = 0;
+	
+	current_x_pos = 0;
+	current_y_pos = 0;
+	toBeTraveled_X = 0;
+	toBeTraveled_Y = 0;
+	toBePosition_X = 0;
+	toBePosition_Y = 0;
+}
+
+void lineTracker(){
+	if(bit_get(PINB , BIT(LEFT_IR_SENSOR_BIT)) && bit_get(PINB , BIT(RIGHT_IR_SENSOR_BIT))){
+		//move(A , FORWARD , 255 - MOTOR_SPEED_HIGH);
+		//move(B , FORWARD , 255 - MOTOR_SPEED_HIGH);
+		_delay_ms(50);
+		move(A , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
+		move(B , FORWARD , MOTOR_SPEED_ROTATION_HI);
+		_delay_ms(50);
+
+		//printf("0\n");
+	}
+	else if (bit_get(PINB , BIT(LEFT_IR_SENSOR_BIT)) && ~(bit_get(PINB , BIT(RIGHT_IR_SENSOR_BIT)))){
+		_delay_ms(50);
+		move(A , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
+		move(B , FORWARD ,MOTOR_SPEED_ROTATION_HI);
+		_delay_ms(150);
+
+		//printf("1\n");
+	}
+	else if (~(bit_get(PINB , BIT(LEFT_IR_SENSOR_BIT))) && bit_get(PINB , BIT(RIGHT_IR_SENSOR_BIT))){
+		_delay_ms(50);
+		move(A , FORWARD , MOTOR_SPEED_ROTATION_HI);
+		move(B , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
+		_delay_ms(150);
+		//printf("2\n");
+	}
+	else if (~(bit_get(PINB , BIT(LEFT_IR_SENSOR_BIT))) && (~bit_get(PINB , BIT(RIGHT_IR_SENSOR_BIT)))){
+		MOTORS_move_forward();
+		_delay_ms(50);
+		enable_distance_timer(true);
+		//printf("3\n");
+	}
+}
+
+void Init_LineTracker_Config(){
+	// #PIN 14 : Left Sensor [PIN 8 in Arduino (PB0)
+	// #PIN 18 : Right Sensor [PIN 12 in Arduino (PB4)
+	
+	DDRB &= 0b11101110;
+	
+}
+
+void check_switch_reset_coordinates() {
+	if(bit_get(DDRB, BIT(RESET_POSITION_BUTTON_BIT))) {
+		_delay_ms(50);
+		reset_coordinates();
+	} 
+}
+
+void Init_Buttons() {
+	bit_clear(DDRB, BIT(RESET_POSITION_BUTTON_BIT));
+}
+
+void Init_LEDS() {
+	bit_set(DDRB, BIT(LED_DISTANCE_BIT));
+	bit_set(DDRB, BIT(LED_OUT_OF_BOX_BIT));
+}
+
+/************************************************************************/
+/* Distance Timer ISR, config, and helper methods                       */
+/************************************************************************/
+ISR (TIMER1_OVF_vect, ISR_NAKED)
+{
+	TCNT1H = 0xB1;
+	TCNT1L = 0xE0;
+	
+	travelled_distance++;
+	
+	PORTB = PORTB^(1 << LED_DISTANCE_BIT);
+
+	reti();
+}
+
+void enable_distance_timer(bool true_val) {
+	if(true_val) {
+		sei();
+		// Timer of 10 miliseconds
+		// Prescalar = 8
+		// Overflow Interrupt Mode
+		TCNT1H = 0xB1;
+		TCNT1L = 0xE0;
+		TCCR1A = 0x00;
+		TCCR1B = 0b00000010;
+		TIMSK1 = (1 << TOIE1);
+	} else {
+		// Resetting the timer and stopping the clk
+		TCNT1H = 0xB1;
+		TCNT1L = 0xE0;
+		TCCR1A = 0x00;
+		TCCR1B = 0b00000000;
+		TIMSK1 = (1 << TOIE1);
+	}
+}
+
+float get_X(float angle)
+{
+	return (unit_step * cos(angle));
+}
+
+float get_Y(float angle)
+{
+	return (unit_step * sin(angle));
+
+}
+
+
+/************************************************************************/
+/*  GYROSCOPE Worker Methods                                            */
+/************************************************************************/
 void MPU_Start_Loc()
 {
 	I2C_Start_Wait(0xD0);								/* I2C start with device write address */
@@ -180,36 +407,36 @@ void MPU_Start_Loc()
 
 void MPU_Perform_Calc()
 {
-		// Calculating Pitch, roll and yaw
-		v_pitch=(Gyro_x/131);
-		if(v_pitch==-1)
-		v_pitch=0;
-		v_roll=(Gyro_y/131);
-		if(v_roll==1)
-		v_roll=0;
-		v_yaw=Gyro_z/131;
-		a_pitch=(v_pitch*0.046);
-		a_roll=(v_roll*0.046);
-		a_yaw=(v_yaw*0.045);
-		pitch= pitch + a_pitch;
-		roll= roll + a_roll;
-		yaw= yaw + a_yaw;
-			
-		gyro_x_calc = Gyro_x/131;
-		gyro_y_calc = Gyro_y/131;
-		gyro_z_calc = Gyro_z/131;
-			
-		if(((gyro_x_calc +0.078) > GYRO_THRESHOLD) || ((gyro_x_calc +0.078) < -GYRO_THRESHOLD)) {
-			Xg += (gyro_x_calc/2.5) +0.078;
-		}
-			
-		if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
-			Yg += gyro_y_calc;
-		}
-			
-		if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
-			Zg += gyro_z_calc;
-		}
+	// Calculating Pitch, roll and yaw
+	v_pitch=(Gyro_x/131);
+	if(v_pitch==-1)
+	v_pitch=0;
+	v_roll=(Gyro_y/131);
+	if(v_roll==1)
+	v_roll=0;
+	v_yaw=Gyro_z/131;
+	a_pitch=(v_pitch*0.046);
+	a_roll=(v_roll*0.046);
+	a_yaw=(v_yaw*0.045);
+	pitch= pitch + a_pitch;
+	roll= roll + a_roll;
+	yaw= yaw + a_yaw;
+	
+	gyro_x_calc = Gyro_x/131;
+	gyro_y_calc = Gyro_y/131;
+	gyro_z_calc = Gyro_z/131;
+	
+	if(((gyro_x_calc +0.078) > GYRO_THRESHOLD) || ((gyro_x_calc +0.078) < -GYRO_THRESHOLD)) {
+		Xg += (gyro_x_calc/2.5) +0.078;
+	}
+	
+	if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
+		Yg += gyro_y_calc;
+	}
+	
+	if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
+		Zg += gyro_z_calc;
+	}
 }
 
 void MPU_Read_RawValue()
@@ -252,182 +479,4 @@ void Init_MPU6050()										/* Gyro initialization function */
 	I2C_Write(INT_ENABLE);								/* Write to interrupt enable register */
 	I2C_Write(0x01);
 	I2C_Stop();
-}
-
-ISR (TIMER1_COMPA_vect)
-{
-	// Calculate (toBeTraveledDistance) relative to the PWM to be generated
-	toBeTraveled_X = get_X(Xg);
-	toBeTraveled_Y = get_Y(Xg);
-	
-	// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
-	toBePosition_X = current_x_pos + toBeTraveled_X;
-	toBePosition_Y = current_y_pos + toBeTraveled_Y;
-	
-	//if (toBePosition_X < boundries[corner_1_x] && toBePosition_X > boundries[corner_4_x] && toBePosition_Y > 0 && toBePosition_Y < boundries[corner_2_y]) {		// Is PositionToBeAt in &bounds or Not:
-	
-	// if PositionToBeAt in &bounds:
-	// Generate PWM accordingly and move car.
-	current_x_pos = toBePosition_X;
-	current_y_pos = toBePosition_Y;
-	isCarMovementAllowed = true;
-	//}
-	//else {
-	// Stop Car and flash lights accordingly
-	isCarMovementAllowed = false;
-	//}
-}
-
-void distance_calc_Init()
-{
-	OCR1A = 3125;
-	TCCR1A = 0x02;
-	TCCR1B = 0x05;
-	TIMSK1 = (1 << OCIE1A);
-}
-
-void Init_LineTracker_Config(){
-	// #PIN 14 : Left Sensor [PIN 8 in Arduino (PB0)
-	// #PIN 18 : Right Sensor [PIN 12 in Arduino (PB4)
-	
-	DDRB &= 0b11101110;
-	
-}
-
-void lineTracker(){
-	if(bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT)) && bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT))){
-		//move(A , FORWARD , 255 - MOTOR_SPEED_HIGH);
-		//move(B , FORWARD , 255 - MOTOR_SPEED_HIGH);
-		move(A , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
-		move(B , FORWARD , MOTOR_SPEED_ROTATION_HI);
-		printf("0\n");
-	}
-	else if (bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT)) && ~(bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT)))){
-		
-		move(A , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
-		move(B , FORWARD ,MOTOR_SPEED_ROTATION_HI);
-		printf("1\n");
-	}
-	else if (~(bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT))) && bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT))){
-		move(A , FORWARD , MOTOR_SPEED_ROTATION_HI);
-		move(B , BACKWARD , 255 - MOTOR_SPEED_ROTATION_HI);
-		
-		printf("2\n");
-	}
-	else if (~(bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT))) && (~bit_get(PINB , BIT(RIGHT_LIGHT_SENSOR_BIT)))){
-		move(A , FORWARD , 255 - MOTOR_SPEED_NORMAL_HI);
-		move(B , FORWARD , 255 - MOTOR_SPEED_NORMAL_HI);
-		printf("3\n");
-	}
-
-
-
-	//if (bit_get(PINB , BIT(LEFT_LIGHT_SENSOR_BIT))){
-		//
-		//move(A , FORWARD , 255 - MOTOR_SPEED_HIGH);
-		//move(B , FORWARD , 255 - MOTOR_SPEED_HIGH);
-		//
-		//printf("2\n");
-	//}
-	//else {
-		//move(A , FORWARD , MOTOR_SPEED_HIGH);
-		//move(B , BACKWARD ,255 - MOTOR_SPEED_HIGH);
-		//printf("3\n");
-	//}
-	_delay_ms(50);
-}
-
-float get_X(float angle)
-{
-	return (unit_step * cos(angle));
-}
-
-float get_Y(float angle)
-{
-	return (unit_step * sin(angle));
-
-}
-
-void main_logic_commented() {
-		
-	//bool calibration = true;
-	//float current_x_pos = 0;
-	//float current_y_pos = 0;
-	//float past_x_pos = 0;
-	//float past_y_pos = 0;
-	//float boundries[] = {0,0,0,0,0,0,0,0};
-		//
-	//float toBeTraveled_X = 0;
-	//float toBeTraveled_Y = 0;
-	//float toBePosition_X = 0;
-	//float toBePosition_Y = 0;
-	//
-	//if(calibration) {		// Is (Calibration) Mode or (Running) Mode?
-		//
-		//// wait for button press, if clicked:
-		//while(1 /* !button? */) {}
-		//
-		//// car is moving and scanning the borders, limits should be set according to Cartesian coordinates:
-		//
-			////* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
-		//while(1 /* !color sensor */) {
-			//// move car down
-		//}
-		//
-			////* Once hit a line, (Move counter Clockwise) accordingly with the line being tracked.
-		//while(1 /* !threshold */) {
-			//// move car right
-		//}
-		//
-			////* Phase 2: Once hit a threshold of (y-change) while moving, Push a limit (current_X, 0).
-		//boundries[corner_1_x] = current_x_pos;
-		//boundries[corner_1_y] = 0;
-		//while(1 /* !threshold */) {
-			//// move car up
-		//}
-		//
-			////* Phase 3: Once hit a threshold of (x-change) while moving, Push a limit (past_limit_X, current_Y)
-		//boundries[corner_2_x] = past_x_pos;
-		//boundries[corner_2_y] = current_y_pos;
-		//while(1 /* !threshold */) {
-			//// move car left
-		//}
-		//
-			////* Phase 4: Once hit a threshold of (y-change) while moving, Push a limit (current_X, past_limit_Y)
-		//boundries[corner_3_x] = current_x_pos;
-		//boundries[corner_3_y] = past_y_pos;	
-		//
-			////* Phase 5: Push a limit (last_X, 0)
-		//boundries[corner_4_x] = past_x_pos;
-		//boundries[corner_4_y] = 0;
-			//
-			////* Phase 6: Rotate car and move anywhere inside the closed rectangle.
-//
-//
-			//
-		//calibration = 0;		// After calibration -> turn to (Running) Mode.
-	//}
-	//else if(!calibration) {	// else if (Running) Mode:
-		//// wait for button press, if clicked:
-			//
-			//// Calculate (toBeTraveledDistance) relative to the PWM to be generated
-			//toBeTraveled_X = get_X(Xg);
-			//toBeTraveled_Y = get_Y(Xg);
-			//
-			//// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
-			//toBePosition_X = current_x_pos + toBeTraveled_X;
-			//toBePosition_Y = current_y_pos + toBeTraveled_Y;
-			//
-			//if (toBePosition_X < boundries[corner_1_x] && toBePosition_X > boundries[corner_4_x] && toBePosition_Y > 0 && toBePosition_Y < boundries[corner_2_y]) {		// Is PositionToBeAt in &bounds or Not:
-				//
-				//// if PositionToBeAt in &bounds:
-				//// Generate PWM accordingly and move car.
-					//
-			//}
-			//else {
-				//// Stop Car and flash lights accordingly
-			//}
-			//
-	//}
-	
 }
