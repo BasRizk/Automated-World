@@ -156,7 +156,7 @@ void main_logic() {
 					Xg = 0;
 					break;
 			
-			case 1:	if(Xg >= 30 && Xg < 60) {
+			case 1:	if((Xg >= 30) && (Xg < 60)) {
 						boundries[corner_2_x] = travelled_distance;
 						boundries[corner_2_y] = 0;
 					} else if (Xg >= 60) {
@@ -167,10 +167,10 @@ void main_logic() {
 					}
 					break;
 			
-			case 2: if(Xg >= (90 + 30) && Xg < (90 + 60) ) {
+			case 2: if((Xg >= 30) && (Xg < 60)) {
 						boundries[corner_3_x] = boundries[corner_2_x];
 						boundries[corner_3_y] = travelled_distance;
-					} else if (Xg >= (90 + 60) ) {
+					} else if (Xg >= 60) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
@@ -178,10 +178,10 @@ void main_logic() {
 					}
 					break;
 					
-			case 3: if(Xg >= (180 + 30) && Xg < (180 + 60) ) {
+			case 3: if((Xg >= 30) && (Xg < 60)) {
 						boundries[corner_4_x] = 0;
 						boundries[corner_4_y] = boundries[corner_3_y];
-					} else if (Xg >= (180 + 60) ) {
+					} else if (Xg >= 60) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
