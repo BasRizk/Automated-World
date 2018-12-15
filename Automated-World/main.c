@@ -42,6 +42,9 @@
 #define radians_factor 0.0174533
 #define GYRO_THRESHOLD 0.3
 
+#define LOWER_LIMIT 70
+#define UPPER_LIMIT 100
+
 void MPU_Start_Loc();
 void MPU_Perform_Calc();
 void MPU_Read_RawValue();
@@ -96,7 +99,7 @@ float toBePosition_Y = 0;
 volatile float unit_direction = 1;
 enum GAME_MODE {CALIBRATION, RUNTIME} current_mode;
 
-volatile long travelled_distance;
+volatile float travelled_distance;
 	
 int main(void)
 {
@@ -156,17 +159,17 @@ void main_logic() {
 		//* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
 		switch(num_of_boundaries_set) {
 			case -1:
-					if (Xg >= 60) {
+					if (Xg >= LOWER_LIMIT) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
 						Xg = 0;
 					}
 					break;
-			case 0:if((Xg >= 30) && (Xg < 60)) {
+			case 0:if((Xg >= LOWER_LIMIT) && (Xg < UPPER_LIMIT)) {
 						boundries[corner_1_x] = 0;
 						boundries[corner_1_y] = 0;
-					} else if (Xg >= 60) {
+					} else if (Xg >= UPPER_LIMIT) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
@@ -174,10 +177,10 @@ void main_logic() {
 					}
 					break;
 			
-			case 1:	if((Xg >= 30) && (Xg < 60)) {
+			case 1:	if((Xg >= LOWER_LIMIT) && (Xg < UPPER_LIMIT)) {
 						boundries[corner_2_x] = travelled_distance;
 						boundries[corner_2_y] = 0;
-					} else if (Xg >= 60) {
+					} else if (Xg >= UPPER_LIMIT) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						Xg = 0;
@@ -185,10 +188,10 @@ void main_logic() {
 					}
 					break;
 			
-			case 2: if((Xg >= 30) && (Xg < 60)) {
+			case 2: if((Xg >= LOWER_LIMIT) && (Xg < UPPER_LIMIT)) {
 						boundries[corner_3_x] = boundries[corner_2_x];
 						boundries[corner_3_y] = travelled_distance;
-					} else if (Xg >= 60) {
+					} else if (Xg >= UPPER_LIMIT) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
@@ -196,10 +199,10 @@ void main_logic() {
 					}
 					break;
 					
-			case 3: if((Xg >= 30) && (Xg < 60)) {
+			case 3: if((Xg >= LOWER_LIMIT) && (Xg < UPPER_LIMIT)) {
 						boundries[corner_4_x] = 0;
 						boundries[corner_4_y] = boundries[corner_3_y];
-					} else if (Xg >= 60) {
+					} else if (Xg >= UPPER_LIMIT) {
 						travelled_distance = 0;
 						num_of_boundaries_set++;
 						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
@@ -237,7 +240,8 @@ void main_logic() {
 		sprintf(buffer," Position Y = %s%c/s\t",float_,0xF8);
 		printf(buffer);
 		*/
-		if (toBePosition_X < boundries[corner_2_x] && toBePosition_Y < boundries[corner_3_y] && toBePosition_X >= 0 && toBePosition_Y >= 0) 
+		// Using First Corner (Width) Only
+		if (toBePosition_X < boundries[corner_2_x] && toBePosition_Y < boundries[corner_2_x] && toBePosition_X >= 0 && toBePosition_Y >= 0) 
 		{	
 			// Generate PWM accordingly and move car. (Already Generated)
 			PORTB = (0 << LED_OUT_OF_BOX_BIT);
@@ -251,11 +255,11 @@ void main_logic() {
 		}
 	}
 	
-	
+	/*
 	dtostrf( Xg, 3, 2, float_ );
 	sprintf(buffer," Gx = %s%c/s\t\n",float_,0xF8);
 	printf(buffer);
-	
+	*/
 	/*
 	dtostrf( Xg, 3, 2, float_ );
 	sprintf(buffer," Gx = %s%c/s\t",float_,0xF8);
@@ -270,8 +274,8 @@ void main_logic() {
 	printf(buffer);
 	
 	*/
-	enable_distance_timer(false);
 	_delay_ms(50);
+	enable_distance_timer(false);
 	MOTORS_stop();
 	
 }
@@ -300,6 +304,10 @@ void serial_input_logic()
 	} else if (input == 'w') {
 		current_mode = CALIBRATION;
 	} else if (input == 'u' || input == 'U') {
+		reset_coordinates();
+	} else if(input == 'X') {
+		reset_coordinates();
+	} else if(input == 'Z') {
 		reset_coordinates();
 	} else {
 		printf("Undefined Key!\n");
@@ -355,9 +363,10 @@ void lineTracker(){
 	else if (~(bit_get(PINB , BIT(LEFT_IR_SENSOR_BIT))) && (~bit_get(PINB , BIT(RIGHT_IR_SENSOR_BIT)))){
 		MOTORS_move_forward();
 		_delay_ms(50);
-		enable_distance_timer(true);
 		//printf("3\n");
 	}
+	enable_distance_timer(true);
+
 }
 
 void Init_LineTracker_Config(){
