@@ -39,6 +39,7 @@
 #define LED_OUT_OF_BOX_BIT 1
 #define RESET_POSITION_BUTTON_BIT 2
 
+#define radians_factor 0.0174533
 #define GYRO_THRESHOLD 0.3
 
 void MPU_Start_Loc();
@@ -57,7 +58,9 @@ void serial_input_logic();
 void lineTracker();
 void Init_LineTracker_Config();
 void reset_coordinates();
+void config_debug_mode();
 void check_switch_reset_coordinates();
+void check_switch_debug_mode();
 void Init_Buttons();
 void Init_LEDS();
 
@@ -77,23 +80,20 @@ char buffer[20], float_[10];
 float gyro_x_calc=0, gyro_y_calc=0, gyro_z_calc=0;
 
 
-volatile float current_x_pos = 0;
+float current_x_pos = 0;
 float current_y_pos = 0;
-volatile float past_x_pos = 0;
+float past_x_pos = 0;
 float past_y_pos = 0;
 
 int num_of_boundaries_set;
-float boundries[] = {0,0,0,0,0,0,0,0};
+long boundries[] = {0,0,0,0,0,0,0,0};
 
-volatile float toBeTraveled_X = 0;
+float toBeTraveled_X = 0;
 float toBeTraveled_Y = 0;
-volatile float toBePosition_X = 0;
+float toBePosition_X = 0;
 float toBePosition_Y = 0;
 
-volatile bool isCarMovementAllowed = true;
-
-float unit_step = 1;
-
+volatile float unit_direction = 1;
 enum GAME_MODE {CALIBRATION, RUNTIME} current_mode;
 
 volatile long travelled_distance;
@@ -114,8 +114,13 @@ int main(void)
 	stdin  = &uart_input;
 	
 	current_mode = CALIBRATION;
-	num_of_boundaries_set = 0;
+	
+	num_of_boundaries_set = -1;
+	
 	sei();
+	
+	//current_mode = RUNTIME;
+	//config_debug_mode();
 	
 	travelled_distance = 0;
 	while(1) {		
@@ -131,9 +136,11 @@ void main_logic() {
 	{
 		if(num_of_boundaries_set >= 4)
 		{
-			num_of_boundaries_set = 0;
+			//num_of_boundaries_set = 0;
 		}
 		lineTracker();
+		//check_switch_reset_coordinates();
+		//check_switch_debug_mode();
 	}
 	else
 	{	
@@ -148,12 +155,23 @@ void main_logic() {
 	if(current_mode == CALIBRATION) {
 		//* Phase 1: (Move down) till you hit a line with (Color Sensor), Set a limit (0,0)
 		switch(num_of_boundaries_set) {
-			case 0: boundries[corner_1_x] = 0;
-					boundries[corner_1_y] = 0;
-					travelled_distance = 0;
-					num_of_boundaries_set++;
-					PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
-					Xg = 0;
+			case -1:
+					if (Xg >= 60) {
+						travelled_distance = 0;
+						num_of_boundaries_set++;
+						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
+						Xg = 0;
+					}
+					break;
+			case 0:if((Xg >= 30) && (Xg < 60)) {
+						boundries[corner_1_x] = 0;
+						boundries[corner_1_y] = 0;
+					} else if (Xg >= 60) {
+						travelled_distance = 0;
+						num_of_boundaries_set++;
+						PORTB = PORTB^(1 << LED_OUT_OF_BOX_BIT);
+						Xg = 0;
+					}
 					break;
 			
 			case 1:	if((Xg >= 30) && (Xg < 60)) {
@@ -189,20 +207,20 @@ void main_logic() {
 					break;
 					
 			case 4: current_mode = RUNTIME;
-			
 			//* Phase 6: Rotate car and move anywhere inside the closed rectangle. (Move by hand and press reset button)
 
 		}	
+		//printf("num_of_boundaries = %d \n", num_of_boundaries_set);
 		
 	} else {
 		
 		// Calculate (toBeTraveledDistance) relative to the PWM to be generated
 		toBeTraveled_X = get_X(Xg);
 		toBeTraveled_Y = get_Y(Xg);
-		
+
 		// Calculate (PositionToBeAt) using (CurrentPosition + toBeTraveledDistance)
-		toBePosition_X = current_x_pos + travelled_distance*toBeTraveled_X;
-		toBePosition_Y = current_y_pos + travelled_distance*toBeTraveled_Y;
+		toBePosition_X = current_x_pos + (unit_direction*travelled_distance*toBeTraveled_X);
+		toBePosition_Y = current_y_pos + (unit_direction*travelled_distance*toBeTraveled_Y);
 		travelled_distance = 0;
 		
 		// if PositionToBeAt in &bounds:
@@ -210,7 +228,16 @@ void main_logic() {
 		current_x_pos = toBePosition_X;
 		current_y_pos = toBePosition_Y;
 		
-		if (toBePosition_X < boundries[corner_2_x] && toBePosition_Y < boundries[corner_3_y]) 
+		/*
+		dtostrf( current_x_pos, 3, 2, float_ );
+		sprintf(buffer," Positions X = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+		
+		dtostrf( current_y_pos, 3, 2, float_ );
+		sprintf(buffer," Position Y = %s%c/s\t",float_,0xF8);
+		printf(buffer);
+		*/
+		if (toBePosition_X < boundries[corner_2_x] && toBePosition_Y < boundries[corner_3_y] && toBePosition_X >= 0 && toBePosition_Y >= 0) 
 		{	
 			// Generate PWM accordingly and move car. (Already Generated)
 			PORTB = (0 << LED_OUT_OF_BOX_BIT);
@@ -223,6 +250,11 @@ void main_logic() {
 			
 		}
 	}
+	
+	
+	dtostrf( Xg, 3, 2, float_ );
+	sprintf(buffer," Gx = %s%c/s\t\n",float_,0xF8);
+	printf(buffer);
 	
 	/*
 	dtostrf( Xg, 3, 2, float_ );
@@ -252,16 +284,15 @@ void serial_input_logic()
 	if (input == 'F') {
 		MOTORS_move_forward();
 		enable_distance_timer(true);
+		unit_direction = 1;
 	} else if (input == 'B') {
 		MOTORS_move_backward();
 		enable_distance_timer(true);
-		//_delay_ms(50);
+		unit_direction = -1;
 	} else if (input == 'R') {
 		MOTORS_move_right();
-		//_delay_ms(100);
 	} else if (input == 'L') {
 		MOTORS_move_left();
-		//_delay_ms(100);
 	} else if (input == 'S' ) {
 		MOTORS_stop();
 	} else if (input == 'W') {
@@ -287,6 +318,12 @@ void reset_coordinates() {
 	toBeTraveled_Y = 0;
 	toBePosition_X = 0;
 	toBePosition_Y = 0;
+}
+
+void config_debug_mode() {
+	boundries[corner_2_x] = 1000;
+	boundries[corner_3_y] = 1000;
+	current_mode = RUNTIME;	
 }
 
 void lineTracker(){
@@ -338,6 +375,14 @@ void check_switch_reset_coordinates() {
 	} 
 }
 
+void check_switch_debug_mode() {
+	if(bit_get(DDRB, BIT(RESET_POSITION_BUTTON_BIT))) {
+		_delay_ms(50);
+		config_debug_mode();
+		_delay_ms(50);
+	}
+}
+
 void Init_Buttons() {
 	bit_clear(DDRB, BIT(RESET_POSITION_BUTTON_BIT));
 }
@@ -385,12 +430,12 @@ void enable_distance_timer(bool true_val) {
 
 float get_X(float angle)
 {
-	return (unit_step * cos(angle));
+	return (cos(angle*radians_factor));
 }
 
 float get_Y(float angle)
 {
-	return (unit_step * sin(angle));
+	return (sin(angle*radians_factor));
 
 }
 
@@ -427,15 +472,33 @@ void MPU_Perform_Calc()
 	gyro_z_calc = Gyro_z/131;
 	
 	if(((gyro_x_calc +0.078) > GYRO_THRESHOLD) || ((gyro_x_calc +0.078) < -GYRO_THRESHOLD)) {
-		Xg += (gyro_x_calc/2.5) +0.078;
+		Xg += (gyro_x_calc/1.25) +0.078;
+		if(Xg >= 359) {
+			Xg-= 360;
+		}
+		if(Xg <= -359) {
+			Xg+= 360;
+		}
 	}
 	
 	if((gyro_y_calc > GYRO_THRESHOLD) || (gyro_y_calc < -GYRO_THRESHOLD)) {
 		Yg += gyro_y_calc;
+		if(Yg >= 359) {
+			Yg-= 360;
+		}
+		if(Yg <= -359) {
+			Yg+= 360;
+		}
 	}
 	
 	if((gyro_z_calc > GYRO_THRESHOLD) || (gyro_z_calc < -GYRO_THRESHOLD)) {
 		Zg += gyro_z_calc;
+		if(Zg >= 359) {
+			Zg-= 360;
+		}
+		if(Zg <= -359) {
+			Zg+= 360;
+		}
 	}
 }
 
